@@ -6,6 +6,7 @@ Provides endpoints for animation generation:
 - POST /api/generate/answer - Continue generation after clarification
 """
 
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -22,17 +23,33 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["generate"])
 
 
+class AnswerItem(BaseModel):
+    """Single answer item for a question."""
+    question_id: str = Field(..., description="Question ID")
+    selected: str = Field(..., description="Selected option value")
+    custom_input: str | None = Field(None, description="Custom input if 'other' was selected")
+
+
 class GenerateAnswerRequest(BaseModel):
     """Request model for answering clarification questions."""
     session_id: str = Field(..., description="Session ID from initial generation")
-    answer: str = Field(..., description="User's answer to the clarification question")
+    answers: list[AnswerItem] = Field(..., description="User's answers to questions")
+
+
+class QuestionOption(BaseModel):
+    """Question option model."""
+    id: str = Field(..., description="Question ID")
+    question: str = Field(..., description="Question text")
+    options: list[str] = Field(..., description="Available options")
 
 
 class GenerateResponse(BaseModel):
     """Response model for generate endpoints."""
-    status: str = Field(..., description="Status: need_more_info, processing, completed, failed, error")
+    status: str = Field(..., description="Status: questioning, processing, completed, failed, error")
     session_id: str | None = Field(None, description="Session ID for tracking")
-    questions: list[str] | None = Field(None, description="Clarification questions if info needed")
+    questions: list[QuestionOption] | None = Field(None, description="Clarification questions if info needed")
+    question_round: int | None = Field(None, description="Current question round (0-indexed)")
+    max_question_rounds: int | None = Field(None, description="Maximum question rounds allowed")
     video_url: str | None = Field(None, description="URL to generated video if completed")
     video_path: str | None = Field(None, description="Local path to generated video if completed")
     qc_result: Dict[str, Any] | None = Field(None, description="Quality check result")
@@ -62,7 +79,7 @@ async def generate_animation(
 
     Returns:
         GenerateResponse with status and relevant data:
-        - status="need_more_info": questions array provided
+        - status="questioning": questions array provided, need user input
         - status="processing": generation in progress
         - status="completed": video_path and qc_result provided
         - status="failed": error information provided
@@ -133,7 +150,7 @@ async def answer_clarification(request: GenerateAnswerRequest) -> GenerateRespon
     questions from a previous need_more_info response.
 
     Args:
-        request: Contains session_id and user's answer
+        request: Contains session_id and user's answers (list of AnswerItem)
 
     Returns:
         GenerateResponse with status and relevant data:
@@ -153,10 +170,13 @@ async def answer_clarification(request: GenerateAnswerRequest) -> GenerateRespon
                 detail=f"Invalid session_id: {request.session_id}"
             )
 
+        # Convert answers to JSON string for continue_generation
+        answer_json = json.dumps([ans.model_dump() for ans in request.answers])
+
         # Continue generation with answer
         result = await continue_generation(
             session_id=request.session_id,
-            answer=request.answer
+            answer=answer_json
         )
 
         # Ensure session_id is in result

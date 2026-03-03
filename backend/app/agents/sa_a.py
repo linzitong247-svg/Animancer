@@ -4,9 +4,7 @@ Sub-Agent A (SA_A) - Animation Prompt Generation Agent
 负责根据用户输入和图片描述，生成适合 Kling AI 的图生视频 prompt。
 """
 
-import base64
 import logging
-from pathlib import Path
 from typing import Optional
 from ..services import llm
 
@@ -87,102 +85,55 @@ Optimized: "The anime character takes slow, deliberate steps forward. Left foot 
 """
 
 
-# System prompt for information sufficiency check
-SUFFICIENCY_CHECK_PROMPT = """You are an animation requirements analyst. Your task is to determine if the user's provided information is sufficient to generate a high-quality animation.
-
-Evaluation Criteria:
-1. Is there a clear action description (e.g., "character waving", "running", "dancing")?
-2. Is there motion direction or trajectory description (optional but helpful)?
-3. Is there animation style or effect preference (optional)?
-
-If sufficient, return: {"sufficient": true}
-If insufficient, return: {"sufficient": false, "questions": ["question1", "question2", ...]}
-
-Respond ONLY with valid JSON, no additional text."""
+# 专为2D横版游戏设计的追问选项（固定3个问题）
+QUESTION_TEMPLATES = [
+    {
+        "id": "character_personality",
+        "question": "请选择角色性格",
+        "options": ["活泼可爱", "阳光帅气", "冷血无情", "其他（自填）"]
+    },
+    {
+        "id": "action_type",
+        "question": "请选择动作类型",
+        "options": ["行走", "跑步", "跳跃", "攻击"]
+    },
+    {
+        "id": "camera_angle",
+        "question": "请选择镜头角度",
+        "options": ["正面", "侧面"]
+    }
+]
 
 
 async def check_sufficiency(image_path: str, user_description: str) -> dict:
     """
     Check if the user's input contains sufficient information for animation generation.
 
+    简化版：直接使用固定的问题模板，不再调用 LLM。
+    判断逻辑：如果 user_description 长度小于 10 个字符，认为信息不足。
+
     Args:
-        image_path: Path to the input image (for multimodal analysis)
+        image_path: Path to the input image (unused, kept for API compatibility)
         user_description: User's description of the desired animation
 
     Returns:
-        dict: Contains "sufficient" (bool) and optionally "questions" (list of str)
-
-    Raises:
-        ValueError: If parameters are invalid
-        RuntimeError: If LLM service fails
+        dict: Contains "sufficient" (bool) and optionally "questions" (list of question objects)
     """
     logger.info("  🔹 [SA_A] 检查信息充足性...")
 
     if not user_description:
         raise ValueError("user_description cannot be empty")
 
-    try:
-        user_message = f"""User Description: {user_description}
+    # 简单判断：描述太短则认为信息不足
+    if len(user_description.strip()) < 10:
+        logger.info("  🔹 [SA_A] 信息不足，返回选择题")
+        return {
+            "sufficient": False,
+            "questions": QUESTION_TEMPLATES
+        }
 
-Please analyze if this information is sufficient to generate a high-quality animation.
-Consider if there's a clear action description and any additional context that would help."""
-
-        # Convert local file path to base64 data URL for multimodal LLM
-        image_data_url = None
-        if image_path:
-            img_path = Path(image_path)
-            if img_path.exists():
-                with open(img_path, "rb") as f:
-                    b64 = base64.b64encode(f.read()).decode("utf-8")
-                suffix = img_path.suffix.lower().lstrip(".")
-                mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(suffix, "image/png")
-                image_data_url = f"data:{mime};base64,{b64}"
-
-        result = await llm.chat(
-            system_prompt=SUFFICIENCY_CHECK_PROMPT,
-            user_message=user_message,
-            image_url=image_data_url
-        )
-
-        # Parse JSON result
-        import json
-        import re
-
-        # 尝试从响应中提取 JSON
-        original_result = result
-
-        # 方法1: 尝试提取 ```json ... ``` 代码块
-        json_match = re.search(r'```json\s*(\{.*?\})\s*```', result, re.DOTALL)
-        if json_match:
-            result = json_match.group(1)
-        else:
-            # 方法2: 尝试提取独立的 JSON 对象
-            json_match = re.search(r'(\{[^{}]*"sufficient"[^{}]*\})', result, re.DOTALL)
-            if json_match:
-                result = json_match.group(1)
-            else:
-                # 方法3: 清理 markdown 代码块标记
-                result = result.strip()
-                if result.startswith("```json"):
-                    result = result[7:]
-                if result.startswith("```"):
-                    result = result[3:]
-                if result.endswith("```"):
-                    result = result[:-3]
-                result = result.strip()
-
-        try:
-            parsed = json.loads(result)
-            is_sufficient = parsed.get('sufficient', True)
-            logger.info(f"  🔹 [SA_A] ✅ 信息充足性: {is_sufficient}")
-            return parsed
-        except json.JSONDecodeError as e:
-            logger.warning(f"  🔹 [SA_A] ⚠️ JSON 解析失败，默认返回 sufficient=True")
-            return {"sufficient": True}
-
-    except Exception as e:
-        logger.error(f"  🔹 [SA_A] ❌ 检查异常: {type(e).__name__}: {e}")
-        return {"sufficient": True}
+    logger.info("  🔹 [SA_A] ✅ 信息充足")
+    return {"sufficient": True}
 
 
 async def generate_prompt(

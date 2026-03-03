@@ -11,6 +11,7 @@ Master Agent (MA) - Main Orchestration Agent
 - 用户追问处理
 """
 
+import json
 import logging
 import asyncio
 import time
@@ -63,19 +64,6 @@ sessions: Dict[str, Dict[str, Any]] = {}
 
 # 最大重试次数
 MAX_RETRY_COUNT = 3
-
-# 信息充足性检查的系统提示
-SUFFICIENCY_CHECK_SYSTEM_PROMPT = """你是一个动画需求分析专家。你需要判断用户提供的信息是否足以生成一个高质量的动画。
-
-判断标准：
-1. 是否有明确的动作描述（如"人物挥手"、"跑动"、"跳舞"等）
-2. 是否有运动方向或轨迹的描述（可选，但有助于提升质量）
-3. 是否有动画风格或效果的偏好（可选）
-
-如果信息充足，返回：{"sufficient": true}
-如果信息不足，返回：{"sufficient": false, "questions": ["问题1", "问题2", ...]}
-
-请以 JSON 格式输出，不要包含任何其他内容。"""
 
 
 async def start_generation(
@@ -134,7 +122,9 @@ async def start_generation(
         "retry_count": 0,
         "generated_prompts": [],
         "qc_reports": [],
-        "start_time": time.time()
+        "start_time": time.time(),
+        "question_round": 0,           # 当前追问轮数
+        "max_question_rounds": 2,      # 最大追问轮数
     }
     _log_pipeline_step("SESSION", "INFO", f"会话已初始化")
 
@@ -154,10 +144,12 @@ async def start_generation(
             logger.info("  ⏸️ 流程暂停: 等待用户补充信息")
             sessions[session_id]["state"] = "awaiting_info"
             return {
-                "status": "need_more_info",
+                "status": "questioning",
                 "questions": sufficiency_result.get("questions", [
                     "请提供更详细的动作描述，例如您希望角色做什么动作？"
-                ])
+                ]),
+                "question_round": sessions[session_id].get("question_round", 0),
+                "max_question_rounds": sessions[session_id].get("max_question_rounds", 2)
             }
     except Exception as e:
         _log_pipeline_step("STEP 1: SUFFICIENCY CHECK", "ERROR",
@@ -177,7 +169,7 @@ async def continue_generation(
 
     Args:
         session_id: 会话唯一标识符
-        answer: 用户对追问的回答
+        answer: 用户对追问的回答（JSON 字符串，格式为选择题答案数组）
 
     Returns:
         dict: 包含状态和相应数据的字典
@@ -197,14 +189,64 @@ async def continue_generation(
         raise ValueError(f"无效的 session_id: {session_id}")
 
     session = sessions[session_id]
-    logger.info(f"MA: 继续生成流程 - session={session_id}")
+    session["question_round"] += 1
+    logger.info(f"MA: 继续生成流程 - session={session_id}, question_round={session['question_round']}")
 
-    # 更新会话状态
-    session["user_prompt"] += f"\n\n用户补充: {answer}"
-    session["history"].append({"role": "user", "content": answer})
+    # answer 现在是 JSON 字符串，需要解析
+    # answers 格式: [{"question_id": "xxx", "selected": "xxx", "custom_input": "xxx"}, ...]
+    try:
+        answers = json.loads(answer) if isinstance(answer, str) else answer
+
+        # 问题名称映射
+        question_names = {
+            "character_personality": "角色性格",
+            "action_type": "动作类型",
+            "camera_angle": "镜头角度"
+        }
+
+        # 记录答题进度日志
+        logger.info("=" * 50)
+        logger.info("📋 用户答题进度追踪")
+        logger.info("=" * 50)
+
+        # 将答案合并到 user_prompt
+        answer_text_parts = []
+        for i, ans in enumerate(answers):
+            q_id = ans.get("question_id")
+            selected = ans.get("selected")
+            custom = ans.get("custom_input")
+
+            q_name = question_names.get(q_id, q_id)
+            final_value = custom if custom else selected
+
+            # 记录每个答案的日志
+            logger.info(f"  ✅ 问题{i+1}（{q_name}）已获取答案: {final_value}")
+
+            # 根据问题 ID 生成描述
+            if q_id == "character_personality":
+                answer_text_parts.append(f"角色性格：{final_value}")
+            elif q_id == "action_type":
+                answer_text_parts.append(f"动作类型：{selected}")
+            elif q_id == "camera_angle":
+                answer_text_parts.append(f"镜头角度：{selected}")
+            else:
+                # 未知问题 ID，直接使用选中的值
+                answer_text_parts.append(f"{q_name}：{final_value}")
+
+        answer_text = "，".join(answer_text_parts)
+        logger.info("=" * 50)
+        logger.info(f"📝 汇总答案: {answer_text}")
+        logger.info("=" * 50)
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"MA: 答案解析失败，使用原始文本: {e}")
+        answer_text = answer
+
+    # 更新用户回答到 prompt
+    session["user_prompt"] += f"\n\n用户补充：{answer_text}"
+    session["history"].append({"role": "user", "content": answer_text})
+
+    # 直接进入生成流程（不再需要再次检查充足性，因为固定3个问题已收集足够信息）
     session["state"] = "generating"
-
-    # 执行生成流程
     return await _execute_generation_pipeline(session_id)
 
 

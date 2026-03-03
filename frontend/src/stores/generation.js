@@ -24,6 +24,18 @@ export const useGenerationStore = defineStore('generation', () => {
   const errorMessage = ref('')
   const isProcessing = ref(false)
 
+  // State - V1.5 追问轮数
+  const questionRound = ref(0)
+  const maxQuestionRounds = ref(2)
+  const QUESTION_TIMEOUT = 60000 // 60秒超时
+  let questionTimer = null
+
+  // State - V2 答题卡模式
+  const currentQuestionIndex = ref(0)  // 当前问题索引
+  const selectedOptions = ref({})      // 用户选择 { question_id: selected_value }
+  const customInputs = ref({})         // 自填内容 { question_id: custom_text }
+  const questionAnswers = ref([])      // 最终答案数组
+
   // Computed
   const hasImage = computed(() => !!uploadedImage.value)
   const canGenerate = computed(() => hasImage.value && prompt.value.trim().length > 0)
@@ -32,6 +44,34 @@ export const useGenerationStore = defineStore('generation', () => {
   const isQuestioning = computed(() => status.value === 'questioning')
   const isCompleted = computed(() => status.value === 'completed')
   const hasError = computed(() => status.value === 'error')
+
+  // Computed - V2 答题卡模式
+  const totalQuestions = computed(() => questions.value.length)
+  const currentQuestion = computed(() => questions.value[currentQuestionIndex.value] || null)
+  const hasMoreQuestions = computed(() => currentQuestionIndex.value < questions.value.length - 1)
+
+  // Timer Functions - V1.5 追问超时
+
+  /**
+   * 开始追问超时计时器
+   */
+  const startQuestionTimer = () => {
+    clearQuestionTimer()
+    questionTimer = setTimeout(() => {
+      console.log('[Store] 追问超时，自动继续')
+      answerQuestion('（用户未及时回答，使用默认设置继续）')
+    }, QUESTION_TIMEOUT)
+  }
+
+  /**
+   * 清除追问超时计时器
+   */
+  const clearQuestionTimer = () => {
+    if (questionTimer) {
+      clearTimeout(questionTimer)
+      questionTimer = null
+    }
+  }
 
   // Actions
 
@@ -80,9 +120,19 @@ export const useGenerationStore = defineStore('generation', () => {
       sessionId.value = response.session_id
       status.value = response.status || 'generating'
 
+      // V1.5: 更新追问轮数
+      if (response.question_round !== undefined) {
+        questionRound.value = response.question_round
+      }
+      if (response.max_question_rounds !== undefined) {
+        maxQuestionRounds.value = response.max_question_rounds
+      }
+
       if (response.status === 'questioning' && response.questions) {
         questions.value = response.questions
         status.value = 'questioning'
+        // V1.5: 开始追问超时计时器
+        startQuestionTimer()
       } else if (response.status === 'completed' && response.video_url) {
         videoUrl.value = response.video_url
         status.value = 'completed'
@@ -104,6 +154,9 @@ export const useGenerationStore = defineStore('generation', () => {
       return
     }
 
+    // V1.5: 清除追问超时计时器
+    clearQuestionTimer()
+
     try {
       status.value = 'processing'
       isProcessing.value = true
@@ -116,16 +169,24 @@ export const useGenerationStore = defineStore('generation', () => {
 
       status.value = response.status || 'processing'
 
+      // V1.5: 更新追问轮数
+      if (response.question_round !== undefined) {
+        questionRound.value = response.question_round
+      }
+
       if (response.status === 'questioning' && response.questions) {
         questions.value = response.questions
         status.value = 'questioning'
+        // V1.5: 重新开始追问超时计时器
+        startQuestionTimer()
       } else if (response.status === 'completed' && response.video_url) {
         videoUrl.value = response.video_url
         status.value = 'completed'
-      }
-
-      if (response.questions) {
-        questions.value = response.questions
+        // V1.5: 清空追问问题
+        questions.value = []
+      } else {
+        // V1.5: 其他状态（如 generating/processing），清空追问问题
+        questions.value = []
       }
     } catch (error) {
       errorMessage.value = error.message || '提交回答失败'
@@ -134,6 +195,100 @@ export const useGenerationStore = defineStore('generation', () => {
     } finally {
       isProcessing.value = false
     }
+  }
+
+  // Actions - V2 答题卡模式
+
+  /**
+   * 选择选项
+   * @param {string} questionId - 问题ID
+   * @param {string} option - 选中的选项
+   */
+  const selectOption = (questionId, option) => {
+    selectedOptions.value[questionId] = option
+  }
+
+  /**
+   * 更新自填内容
+   * @param {string} questionId - 问题ID
+   * @param {string} value - 自填内容
+   */
+  const updateCustomInput = (questionId, value) => {
+    customInputs.value[questionId] = value
+  }
+
+  /**
+   * 确认当前问题，进入下一题
+   * @returns {boolean} 是否还有下一题
+   */
+  const confirmQuestion = () => {
+    const currentQ = currentQuestion.value
+    if (!currentQ) return false
+
+    const questionId = currentQ.id
+    const selected = selectedOptions.value[questionId]
+
+    // 记录答案
+    questionAnswers.value.push({
+      question_id: questionId,
+      selected: selected,
+      custom_input: customInputs.value[questionId] || null
+    })
+
+    // 进入下一题
+    if (currentQuestionIndex.value < questions.value.length - 1) {
+      currentQuestionIndex.value++
+      return true // 还有下一题
+    }
+    return false // 已是最后一题
+  }
+
+  /**
+   * 提交所有答案
+   */
+  const submitAllAnswers = async () => {
+    if (!sessionId.value) return
+
+    clearQuestionTimer()
+    status.value = 'generating'
+    isProcessing.value = true
+    errorMessage.value = ''
+
+    try {
+      const response = await api.answerQuestion({
+        session_id: sessionId.value,
+        answers: questionAnswers.value
+      })
+
+      // 清空追问状态
+      questions.value = []
+      currentQuestionIndex.value = 0
+      selectedOptions.value = {}
+      customInputs.value = {}
+
+      status.value = response.status || 'generating'
+
+      if (response.status === 'completed' && response.video_url) {
+        videoUrl.value = response.video_url
+        status.value = 'completed'
+      }
+    } catch (error) {
+      errorMessage.value = error.message || '提交失败'
+      status.value = 'error'
+      console.error('Submit answers error:', error)
+    } finally {
+      isProcessing.value = false
+    }
+  }
+
+  /**
+   * 重置追问状态
+   */
+  const resetQuestionState = () => {
+    currentQuestionIndex.value = 0
+    selectedOptions.value = {}
+    customInputs.value = {}
+    questionAnswers.value = []
   }
 
   /**
@@ -261,6 +416,11 @@ export const useGenerationStore = defineStore('generation', () => {
     frames.value = []
     errorMessage.value = ''
     isProcessing.value = false
+    // V1.5: 重置追问轮数和计时器
+    questionRound.value = 0
+    clearQuestionTimer()
+    // V2: 重置答题卡状态
+    resetQuestionState()
   }
 
   return {
@@ -278,6 +438,14 @@ export const useGenerationStore = defineStore('generation', () => {
     frames,
     errorMessage,
     isProcessing,
+    // V1.5: 追问轮数状态
+    questionRound,
+    maxQuestionRounds,
+    // V2: 答题卡状态
+    currentQuestionIndex,
+    selectedOptions,
+    customInputs,
+    questionAnswers,
 
     // Computed
     hasImage,
@@ -287,6 +455,10 @@ export const useGenerationStore = defineStore('generation', () => {
     isQuestioning,
     isCompleted,
     hasError,
+    // V2: 答题卡计算属性
+    totalQuestions,
+    currentQuestion,
+    hasMoreQuestions,
 
     // Actions
     setUploadedImage,
@@ -297,6 +469,12 @@ export const useGenerationStore = defineStore('generation', () => {
     exportPng,
     exportVideo,
     pollStatus,
-    reset
+    reset,
+    // V2: 答题卡方法
+    selectOption,
+    updateCustomInput,
+    confirmQuestion,
+    submitAllAnswers,
+    resetQuestionState
   }
 })

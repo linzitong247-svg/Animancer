@@ -32,66 +32,26 @@
       </el-button>
     </div>
 
-    <!-- 追问对话区域 -->
+    <!-- V2: 答题卡区域 -->
     <transition name="slide-fade">
-      <div v-if="questions.length > 0 || conversationHistory.length > 0" class="conversation-area">
-        <div class="conversation-header">
-          <span class="header-text">对话追问</span>
-          <el-badge :value="questions.length" :hidden="questions.length === 0" type="primary" />
-        </div>
-
-        <div class="conversation-messages">
-          <!-- 历史消息 -->
-          <div
-            v-for="(msg, index) in conversationHistory"
-            :key="`history-${index}`"
-            :class="['message', msg.role]"
-          >
-            <div class="message-content">
-              <div class="message-text">{{ msg.content }}</div>
-              <div class="message-time">{{ msg.time }}</div>
-            </div>
-          </div>
-
-          <!-- 当前追问问题 -->
-          <div
-            v-for="(question, qIndex) in questions"
-            :key="`question-${qIndex}`"
-            class="message question"
-          >
-            <div class="message-content">
-              <div class="message-text">{{ question }}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 追问回答输入 -->
-        <div v-if="questions.length > 0" class="answer-section">
-          <el-input
-            v-model="answerText"
-            placeholder="请回答问题以继续生成..."
-            :disabled="isAnswering"
-            @keydown.ctrl.enter="handleAnswer"
-          >
-            <template #append>
-              <el-button
-                type="primary"
-                :disabled="!answerText.trim() || isAnswering"
-                :loading="isAnswering"
-                @click="handleAnswer"
-              >
-                发送
-              </el-button>
-            </template>
-          </el-input>
-        </div>
+      <div v-if="showQuestionCard" class="question-area">
+        <QuestionCard
+          :question="currentQuestion"
+          :current-step="currentStep"
+          :total-steps="totalQuestions"
+          :answers-history="answersHistory"
+          @confirm="handleQuestionConfirm"
+        />
       </div>
     </transition>
 
     <!-- 生成状态提示 -->
     <transition name="fade">
-      <div v-if="statusMessage" class="status-message">
-        <el-icon class="status-icon" :class="statusType"><loading v-if="isLoading" /><info-filled v-else /></el-icon>
+      <div v-if="statusMessage" class="status-message" :class="{ error: status === 'error' }">
+        <el-icon class="status-icon" :class="{ error: status === 'error' }">
+          <loading v-if="isLoading" />
+          <info-filled v-else />
+        </el-icon>
         <span>{{ statusMessage }}</span>
       </div>
     </transition>
@@ -103,6 +63,7 @@ import { ref, computed, watch } from 'vue'
 import { QuestionFilled, VideoPlay, Loading, InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useGenerationStore } from '../stores/generation'
+import QuestionCard from './QuestionCard.vue'
 
 const props = defineProps({
   modelValue: {
@@ -115,20 +76,58 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'submit', 'answer'])
+const emit = defineEmits(['update:modelValue', 'submit'])
 
 const store = useGenerationStore()
 
 const localPrompt = ref('')
-const answerText = ref('')
-const conversationHistory = ref([])
-const isAnswering = ref(false)
 
 // 从 store 获取状态
 const isLoading = computed(() => store.isLoading || store.isProcessing)
-const questions = computed(() => store.questions)
 const status = computed(() => store.status)
 const errorMessage = computed(() => store.errorMessage)
+
+// V2: 答题卡相关状态
+const questions = computed(() => store.questions)
+const currentQuestion = computed(() => store.currentQuestion)
+const currentQuestionIndex = computed(() => store.currentQuestionIndex)
+const totalQuestions = computed(() => store.totalQuestions)
+
+const currentStep = computed(() => currentQuestionIndex.value + 1)
+
+const showQuestionCard = computed(() => {
+  return store.isQuestioning && questions.value.length > 0 && currentQuestion.value
+})
+
+// 构建答题历史状态（用于显示 ✅🔄⏳ 状态）
+const answersHistory = computed(() => {
+  return questions.value.map((q, idx) => {
+    // 获取问题名称（去掉"请选择"前缀）
+    const label = q.question.replace('请选择', '')
+
+    // 确定状态
+    let status = 'pending' // 待选择
+    let value = ''
+
+    if (idx < currentQuestionIndex.value) {
+      // 已答完的问题
+      status = 'done'
+      // 从 questionAnswers 中获取答案
+      const answer = store.questionAnswers.find(a => a.question_id === q.id)
+      value = answer?.custom_input || answer?.selected || ''
+    } else if (idx === currentQuestionIndex.value) {
+      // 当前答题中的问题
+      status = 'current'
+      value = ''
+    }
+
+    return {
+      status,      // 'done' | 'current' | 'pending'
+      label,       // 问题名称（如"角色性格"）
+      value        // 已答问题的答案值
+    }
+  })
+})
 
 const canSubmit = computed(() => {
   return store.hasImage && localPrompt.value.trim().length > 0
@@ -151,10 +150,6 @@ const statusMessage = computed(() => {
   }
 })
 
-const statusType = computed(() => {
-  return status.value === 'error' ? 'error' : 'info'
-})
-
 // 监听外部值变化
 watch(() => props.modelValue, (newVal) => {
   localPrompt.value = newVal || ''
@@ -166,14 +161,13 @@ watch(localPrompt, (newVal) => {
   store.setPrompt(newVal)
 })
 
-// 监听追问问题变化
-watch(() => store.questions, (newQuestions) => {
-  if (newQuestions.length > 0) {
-    // 滚动到追问区域
+// 监听追问问题变化，滚动到答题卡区域
+watch(showQuestionCard, (show) => {
+  if (show) {
     setTimeout(() => {
-      const conversationArea = document.querySelector('.conversation-area')
-      if (conversationArea) {
-        conversationArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      const questionArea = document.querySelector('.question-area')
+      if (questionArea) {
+        questionArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
       }
     }, 100)
   }
@@ -194,58 +188,27 @@ const handleSubmit = () => {
     return
   }
 
-  // 添加用户消息到历史
-  conversationHistory.value.push({
-    role: 'user',
-    content: prompt,
-    time: formatTime(new Date())
-  })
-
   store.startGeneration()
 }
 
 /**
- * 回答追问
+ * V2: 处理答题卡确认
  */
-const handleAnswer = () => {
-  const answer = answerText.value.trim()
-  if (!answer) {
-    ElMessage.warning('请输入回答内容')
-    return
+const handleQuestionConfirm = async ({ questionId, selected, customInput }) => {
+  // 更新 store 中的选择状态
+  store.selectOption(questionId, customInput || selected)
+
+  if (customInput) {
+    store.updateCustomInput(questionId, customInput)
   }
 
-  // 添加用户回答到历史
-  questions.value.forEach((question) => {
-    conversationHistory.value.push({
-      role: 'assistant',
-      content: question,
-      time: formatTime(new Date())
-    })
-  })
+  // 确认当前问题
+  const hasMore = store.confirmQuestion()
 
-  conversationHistory.value.push({
-    role: 'user',
-    content: answer,
-    time: formatTime(new Date())
-  })
-
-  const currentAnswer = answer
-  answerText.value = ''
-  isAnswering.value = true
-
-  emit('answer', currentAnswer)
-  store.answerQuestion(currentAnswer).finally(() => {
-    isAnswering.value = false
-  })
-}
-
-/**
- * 格式化时间
- */
-const formatTime = (date) => {
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  return `${hours}:${minutes}`
+  // 如果没有更多问题，提交所有答案
+  if (!hasMore) {
+    await store.submitAllAnswers()
+  }
 }
 </script>
 
@@ -298,57 +261,13 @@ const formatTime = (date) => {
   margin-right: 8px;
 }
 
-/* 对话区域 */
-.conversation-area {
+/* V2: 答题卡区域 */
+.question-area {
   margin-top: 20px;
-  padding: 16px;
-  background: var(--el-fill-color-light);
-  border-radius: 12px;
-  border: 1px solid var(--el-border-color);
+  animation: slideIn 0.3s ease;
 }
 
-.conversation-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
-.header-text {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.conversation-messages {
-  max-height: 300px;
-  overflow-y: auto;
-  margin-bottom: 16px;
-  padding-right: 8px;
-}
-
-.conversation-messages::-webkit-scrollbar {
-  width: 6px;
-}
-
-.conversation-messages::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.conversation-messages::-webkit-scrollbar-thumb {
-  background: var(--el-border-color);
-  border-radius: 3px;
-}
-
-.message {
-  display: flex;
-  margin-bottom: 12px;
-  animation: messageSlide 0.3s ease;
-}
-
-@keyframes messageSlide {
+@keyframes slideIn {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -357,63 +276,6 @@ const formatTime = (date) => {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.message.user {
-  justify-content: flex-end;
-}
-
-.message.assistant {
-  justify-content: flex-start;
-}
-
-.message.question {
-  justify-content: flex-start;
-}
-
-.message-content {
-  max-width: 80%;
-}
-
-.message.user .message-content {
-  background: var(--el-color-primary);
-  color: #fff;
-  padding: 10px 14px;
-  border-radius: 12px 12px 0 12px;
-}
-
-.message.assistant .message-content,
-.message.question .message-content {
-  background: #fff;
-  padding: 10px 14px;
-  border-radius: 12px 12px 12px 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.message.question .message-content {
-  background: #fff9e6;
-  border: 1px solid #ffe58f;
-}
-
-.message-text {
-  font-size: 14px;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.message.user .message-text {
-  color: #fff;
-}
-
-.message-time {
-  font-size: 11px;
-  margin-top: 4px;
-  opacity: 0.7;
-}
-
-.answer-section {
-  border-top: 1px solid var(--el-border-color-lighter);
-  padding-top: 12px;
 }
 
 /* 状态消息 */
