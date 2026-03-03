@@ -1,0 +1,380 @@
+https://skillsmp.com/skills/github-awesome-copilot-skills-game-engine-skill-md
+https://skillsmp.com/skills/sickn33-antigravity-awesome-skills-skills-game-development-2d-games-skill-md
+https://skillsmp.com/skills/sickn33-antigravity-awesome-skills-skills-game-development-game-art-skill-md
+https://skillsmp.com/skills/neversight-skills-feed-data-skills-md-omer-metin-skills-for-antigravity-level-design-skill-md
+
+
+升级版：多 Agent 协作架构
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                      Orchestrator Agent                         │
+  │              (任务规划 + 状态管理 + 决策中心)                      │
+  └───────────────────────────┬─────────────────────────────────────┘
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+  ┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+  │ Agent: 分析师  │   │ Agent: 生成师  │   │ Agent: 质检师  │
+  │   Analyzer    │   │   Generator   │   │   Reviewer    │
+  └───────┬───────┘   └───────┬───────┘   └───────┬───────┘
+          │                   │                   │
+          ▼                   ▼                   ▼
+  ┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+  │ • 图像分析     │   │ • 动画生成     │   │ • 质量评估     │
+  │ • 角色识别     │   │ • 图像生成     │   │ • 一致性检查   │
+  │ • 动作推荐     │   │ • 风格迁移     │   │ • 自动重试决策 │
+  └───────────────┘   └───────────────┘   └───────────────┘
+
+  ---
+  核心创新点
+
+  1. 智能图像分析
+
+  用户上传图片
+       ↓
+  Analyzer Agent (视觉模型)
+       ↓
+  输出结构化报告：
+  {
+    "character_type": "战士",
+    "facing": "right",
+    "art_style": "anime_2d",
+    "has_weapon": true,
+    "weapon_type": "sword",
+    "recommended_actions": ["attack", "idle", "run"],
+    "generation_hints": {"motion_intensity": "high", ...}
+  }
+
+  2. 并行动画生成
+
+  Orchestrator 拆分任务：
+       ├─ Task 1: 待机动作 ──→ Generator-1 ──→ Result 1
+       ├─ Task 2: 跑步动作 ──→ Generator-2 ──→ Result 2
+       └─ Task 3: 攻击动作 ──→ Generator-3 ──→ Result 3
+                                (并行执行)
+
+  3. 质量闭环
+
+  生成结果 → Reviewer Agent
+                ↓
+          ┌─────┴─────┐
+          │ 评分 < 7?  │
+          └─────┬─────┘
+           Yes  │  No
+          ↓     ↓
+      自动重试  通过
+      (调整参数)
+
+  4. 跨帧一致性保证
+
+  帧序列 → Reviewer Agent
+                ↓
+      检查：角色颜色/轮廓/细节是否一致？
+                ↓
+      不一致帧 → 标记 → 后处理修复
+
+  ---
+  完整工作流示例
+
+  用户输入: "帮我生成这个角色的待机、走路、攻击动作"
+       ↓
+  ┌─ Orchestrator 解析意图 ─┐
+  │ 任务: 生成3种动作        │
+  │ 输入: 1张角色图          │
+  └────────────────────────┘
+       ↓
+  ┌─ Analyzer 分析图片 ─────┐
+  │ 角色类型: 魔法师         │
+  │ 朝向: 右侧               │
+  │ 风格: 2D动漫             │
+  │ 推荐: 待机/走路/施法     │
+  └────────────────────────┘
+       ↓
+  ┌─ Orchestrator 规划 ─────┐
+  │ 动作1: 待机 (低强度)     │
+  │ 动作2: 走路 (中强度)     │
+  │ 动作3: 攻击→施法 (高强度)│
+  └────────────────────────┘
+       ↓
+  ┌─ Generator 并行生成 ────┐
+  │ [====] 待机 100%        │
+  │ [====] 走路 100%        │
+  │ [=== ] 施法 75%         │
+  └────────────────────────┘
+       ↓
+  ┌─ Reviewer 质检 ─────────┐
+  │ 待机: 8.5/10 ✓          │
+  │ 走路: 7.2/10 ✓          │
+  │ 施法: 5.8/10 ✗ → 重试   │
+  └────────────────────────┘
+       ↓
+  ┌─ 后处理 ────────────────┐
+  │ • 背景去除 (RMBG)        │
+  │ • 拆帧 (24帧)            │
+  │ • 一致性检查             │
+  │ • 打包导出               │
+  └────────────────────────┘
+
+  ---
+  技术亮点总结
+
+  ┌──────────┬──────────┬─────────────────────┐
+  │   特性   │ 传统方案 │      升级方案       │
+  ├──────────┼──────────┼─────────────────────┤
+  │ 任务执行 │ 线性串行 │ 并行 + 编排         │
+  ├──────────┼──────────┼─────────────────────┤
+  │ 参数设置 │ 用户手动 │ Agent 智能推荐      │
+  ├──────────┼──────────┼─────────────────────┤
+  │ 质量控制 │ 无       │ 自动评估 + 闭环重试 │
+  ├──────────┼──────────┼─────────────────────┤
+  │ 一致性   │ 靠运气   │ 主动检测 + 修复     │
+  ├──────────┼──────────┼─────────────────────┤
+  │ 可扩展性 │ 改代码   │ 加 Agent/Skill      │
+  └──────────┴──────────┴─────────────────────┘
+
+
+一、确定参与者（Actor）
+
+  传统时序图：
+  User → Frontend → Backend → Database
+
+  Agent 架构时序图，参与者变成：
+
+  ┌─────────────────────────────────────────────────────────┐
+  │  用户层     │  应用层        │  Agent 层    │  服务层    │
+  ├─────────────┼────────────────┼──────────────┼────────────┤
+  │  User       │  Electron+Vue  │  Orchestrator│  Kling API │
+  │             │  Frontend      │  Analyzer    │  LLM API   │
+  │             │                │  Generator   │  RMBG      │
+  │             │                │  Reviewer    │            │
+  └─────────────┴────────────────┴──────────────┴────────────┘
+
+  ---
+  二、Mermaid 语法技巧
+
+  Agent 架构常用的语法：
+
+  %% 并行执行
+  par 并行任务
+      A -> B: 任务1
+  and
+      A -> C: 任务2
+  end
+
+  %% 条件分支
+  alt 成功
+      A -> B: 继续
+  else 失败
+      A -> C: 重试
+  end
+
+  %% 循环
+  loop 直到成功
+      A -> B: 尝试
+  end
+
+  %% 分组（视觉上区分）
+  rect rgb(200, 220, 240)
+      A -> B: 分析阶段
+  end
+
+  ---
+  三、先画一个简化版（单动作流程）
+
+  sequenceDiagram
+      actor User as 用户
+      participant FE as Vue 前端
+      participant BE as FastAPI 后端
+      participant ORC as Orchestrator
+      participant ANA as Analyzer
+      participant GEN as Generator
+      participant REV as Reviewer
+      participant Kling as Kling API
+      participant LLM as LLM (决策)
+
+      User->>FE: 上传图片 + "生成攻击动作"
+      FE->>BE: POST /generate
+
+      rect rgb(230, 240, 255)
+          Note over BE,ANA: 阶段1: 分析
+          BE->>ORC: 创建任务
+          ORC->>ANA: 分析图片
+          ANA->>LLM: 识别角色特征
+          LLM-->>ANA: {type:战士, weapon:剑}
+          ANA-->>ORC: 分析报告
+      end
+
+      rect rgb(255, 240, 230)
+          Note over ORC,Kling: 阶段2: 生成
+          ORC->>GEN: 生成攻击动画
+          GEN->>Kling: 图+提示词
+          Kling-->>GEN: 视频URL
+          GEN-->>ORC: 视频数据
+      end
+
+      rect rgb(240, 255, 230)
+          Note over ORC,REV: 阶段3: 质检
+          ORC->>REV: 评估质量
+          REV->>LLM: 这视频合格吗?
+          LLM-->>REV: 评分 8/10 ✓
+          REV-->>ORC: 通过
+      end
+
+      ORC-->>BE: PNG序列帧
+      BE-->>FE: 返回预览
+      FE-->>User: 展示结果
+
+  ---
+  四、再画复杂版（多动作并行 + 重试）
+
+  sequenceDiagram
+      actor User as 用户
+      participant FE as Vue 前端
+      participant BE as FastAPI 后端
+      participant ORC as Orchestrator
+      participant ANA as Analyzer
+      participant GEN as Generator
+      participant REV as Reviewer
+      participant Kling as Kling API
+
+      User->>FE: 上传图片 + "生成待机/走路/攻击"
+      FE->>BE: POST /generate
+
+      BE->>ORC: 创建任务
+      ORC->>ANA: 分析图片
+      ANA-->>ORC: 分析报告 + 3个动作建议
+
+      rect rgb(240, 240, 255)
+          Note over ORC,Kling: 并行生成 3 个动作
+          par 动作1: 待机
+              ORC->>GEN: generate(idle)
+              GEN->>Kling: 请求视频
+              Kling-->>GEN: 视频
+              GEN-->>ORC: idle_result
+          and 动作2: 走路
+              ORC->>GEN: generate(walk)
+              GEN->>Kling: 请求视频
+              Kling-->>GEN: 视频
+              GEN-->>ORC: walk_result
+          and 动作3: 攻击
+              ORC->>GEN: generate(attack)
+              GEN->>Kling: 请求视频
+              Kling-->>GEN: 视频
+              GEN-->>ORC: attack_result
+          end
+      end
+
+      rect rgb(255, 245, 230)
+          Note over ORC,REV: 质检阶段
+          ORC->>REV: 检查 idle_result
+          REV-->>ORC: 8/10 ✓
+
+          ORC->>REV: 检查 walk_result
+          REV-->>ORC: 7/10 ✓
+
+          ORC->>REV: 检查 attack_result
+          REV-->>ORC: 5/10 ✗
+
+          loop 重试直到通过
+              ORC->>GEN: 重试 attack
+              GEN->>Kling: 调整参数重试
+              Kling-->>GEN: 新视频
+              GEN-->>ORC: attack_result_v2
+              ORC->>REV: 检查
+              REV-->>ORC: 7/10 ✓
+          end
+      end
+
+      ORC-->>BE: 全部 PNG 序列
+      BE-->>FE: 返回预览
+      FE-->>User: 展示 + 导出按钮
+
+  ---
+  五、我的建议
+
+  1. 先画 3 张图：
+    - 整体架构图（静态，展示各组件关系）
+    - 主流程时序图（上面那个简化版）
+    - 并行+重试时序图（复杂版）
+  2. 分层画，不要一张图画所有细节：
+    - 宏观层：用户 → 应用 → Agent系统 → 外部服务
+    - Agent内部层：Orchestrator ↔ 各Agent
+    - 单Agent层：Generator ↔ Kling API 的细节
+  3. 用颜色区分阶段（用 rect）：
+    - 蓝色：分析阶段
+    - 橙色：生成阶段
+    - 绿色：质检阶段
+
+
+
+====================================================================
+
+ 最推荐：关卡设计助手（演示效果最好）
+
+  演示界面设计
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                        游戏关卡设计助手                                  │
+  ├──────────────┬─────────────────────────────────┬────────────────────────┤
+  │   参数配置   │         Agent 思考过程           │        关卡预览         │
+  ├──────────────├─────────────────────────────────┼────────────────────────┤
+  │ 关卡类型:    │  🔄 正在设计关卡...              │  ┌──────────────────┐  │
+  │ □ 副本       │                                 │  │   [地图预览]      │  │
+  │ ☑ 竞技场     │  ① 调用 Skill: 敌人配置         │  │                  │  │
+  │ □ 活动       │     └→ 生成: 3 个小怪 + 1 Boss  │  │  👾 [Boss]       │  │
+  │              │                                 │  │      👾 👾       │  │
+  │ 难度等级:    │  ② 调用 Skill: 地形生成         │  │                  │  │
+  │ ━━━●━━━     │     └→ 生成: 狭长走廊 + Boss房   │  │  🚪              │  │
+  │              │                                 │  └──────────────────┘  │
+  │ 目标玩家:    │  ③ 调用 Skill: 战斗模拟         │                        │
+  │ ☑ 新手       │     └→ 模拟 100 场...           │  模拟结果:              │
+  │ □ 老手       │     └→ 通过率: 15% ❌ 太难      │  • 通过率: 15%         │
+  │              │                                 │  • 平均耗时: 8 分钟    │
+  │ [开始设计]   │  ④ 调用 Skill: 难度诊断         │  • 死亡位置: Boss      │
+  │              │     └→ 问题: Boss 伤害过高      │                        │
+  │              │                                 │                        │
+  │ 迭代历史:    │  ⑤ 调用 Skill: 数值调整         │                        │
+  │ v1 → v2 → v3│     └→ 降低 Boss 伤害 30%       │                        │
+  │              │                                 │                        │
+  │              │  ⑥ 调用 Skill: 战斗模拟 (再次)  │                        │
+  │              │     └→ 通过率: 62% ✅ 符合目标  │                        │
+  │              │                                 │                        │
+  │              │  ✅ 设计完成！                   │  [导出配置]            │
+  └──────────────┴─────────────────────────────────┴────────────────────────┘
+
+  录屏演示流程
+
+  第一步：配置参数
+  [输入] 选择难度、关卡类型 → 点击"开始设计"
+
+  第二步：观察 Agent 思考过程（这是亮点！）
+  [观众看到] Agent 一步步调用 Skill，实时展示每个 Skill 的输出
+    - "正在配置敌人..."
+    - "正在生成地形..."
+    - "正在模拟战斗..."
+    - "通过率太低，正在分析原因..."
+    - "发现 Boss 伤害过高，正在调整..."
+    - "再次模拟..."
+    - "设计完成！"
+
+  第三步：查看关卡预览
+  [观众看到] 地图可视化、怪物分布、模拟数据
+
+  第四步：调整参数重新设计
+  [输入] 拖动难度滑块 → Agent 重新设计 → 观察结果变化
+
+  技术实现难度
+
+  ┌──────────────┬──────┬───────────────────────────────────┐
+  │     模块     │ 难度 │               说明                │
+  ├──────────────┼──────┼───────────────────────────────────┤
+  │ 前端界面     │ 低   │ 简单的三栏布局，用 React/Vue 都行 │
+  ├──────────────┼──────┼───────────────────────────────────┤
+  │ Agent 框架   │ 低   │ 用 LangChain 或自研轻量框架       │
+  ├──────────────┼──────┼───────────────────────────────────┤
+  │ Skill 实现   │ 中   │ 战斗模拟需要写简化版游戏逻辑      │
+  ├──────────────┼──────┼───────────────────────────────────┤
+  │ 地图可视化   │ 低   │ 用 Canvas 或简单的格子图          │
+  ├──────────────┼──────┼───────────────────────────────────┤
+  │ 思考过程展示 │ 低   │ 每个 Skill 输出时推送到前端       │
+  └──────────────┴──────┴───────────────────────────────────┘

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:skillsmp.com)",
+      "Bash(curl:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(ELECTRON_MIRROR=\"https://npmmirror.com/mirrors/electron/\" npm install:*)",
+      "Bash(D:/claude_project/Animancer/backend/venv/Scripts/python:*)",
+      "Bash(./venv/Scripts/python.exe:*)",
+      "Bash(D:/claude_project/Animancer/backend/venv/python.exe:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(./venv/python.exe:*)",
+      "Bash(python:*)"
+    ]
+  }
+}

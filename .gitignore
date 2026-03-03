@@ -1,0 +1,60 @@
+# Dependencies
+backend/venv/
+venv/
+frontend/node_modules/
+electron/node_modules/
+node_modules/
+
+# Build outputs
+frontend/dist/
+
+# Data directories (generated files)
+backend/data/uploads/
+backend/data/videos/
+backend/data/frames/
+backend/data/exports/
+backend/data/sessions/
+*.mp4
+*.webm
+*.zip
+
+# Environment files
+.env
+.env.local
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# Plan and development files
+V1开发记录.md
+V2-PLAN.md
+implementation-plan.md
+mermaid.md
+mermaid.pdf
+prd.md
+technical-plan.md
+
+# Test files
+test_*.py
+*_test.py
