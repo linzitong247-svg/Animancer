@@ -23,6 +23,8 @@ export const useGenerationStore = defineStore('generation', () => {
   const frames = ref([])
   const errorMessage = ref('')
   const isProcessing = ref(false)
+  const generationStage = ref(null) // null, 'sa_a', 'sa_g', 'sa_qc'
+  let pollTimer = null
 
   // State - V1.5 追问轮数
   const questionRound = ref(0)
@@ -133,6 +135,10 @@ export const useGenerationStore = defineStore('generation', () => {
         status.value = 'questioning'
         // V1.5: 开始追问超时计时器
         startQuestionTimer()
+      } else if (response.status === 'generating') {
+        // V2: 后台生成中，启动轮询
+        generationStage.value = response.generation_stage || 'sa_a'
+        startPolling()
       } else if (response.status === 'completed' && response.video_url) {
         videoUrl.value = response.video_url
         status.value = 'completed'
@@ -260,17 +266,20 @@ export const useGenerationStore = defineStore('generation', () => {
         answers: questionAnswers.value
       })
 
-      // 清空追问状态
+      // 清空追问问题（保留 selectedOptions 用于显示完整咒语）
       questions.value = []
       currentQuestionIndex.value = 0
-      selectedOptions.value = {}
       customInputs.value = {}
 
       status.value = response.status || 'generating'
+      generationStage.value = response.generation_stage || 'sa_a'
 
       if (response.status === 'completed' && response.video_url) {
         videoUrl.value = response.video_url
         status.value = 'completed'
+        stopPolling()
+      } else if (response.status === 'generating') {
+        startPolling()
       }
     } catch (error) {
       errorMessage.value = error.message || '提交失败'
@@ -378,7 +387,47 @@ export const useGenerationStore = defineStore('generation', () => {
   }
 
   /**
-   * 轮询获取生成状态
+   * 开始轮询生成状态
+   */
+  const startPolling = () => {
+    stopPolling()
+    pollTimer = setInterval(async () => {
+      if (!sessionId.value) return
+      try {
+        const response = await api.getGenerationStatus(sessionId.value)
+        generationStage.value = response.generation_stage || null
+
+        if (response.status === 'completed') {
+          stopPolling()
+          if (response.video_url) {
+            videoUrl.value = response.video_url
+          }
+          status.value = 'completed'
+          generationStage.value = null
+        } else if (response.status === 'failed' || response.status === 'error') {
+          stopPolling()
+          errorMessage.value = response.error || '生成失败'
+          status.value = 'error'
+          generationStage.value = null
+        }
+      } catch (error) {
+        console.error('Poll status error:', error)
+      }
+    }, 3000)
+  }
+
+  /**
+   * 停止轮询
+   */
+  const stopPolling = () => {
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  }
+
+  /**
+   * 轮询获取生成状态（单次）
    */
   const pollStatus = async () => {
     if (!sessionId.value) return
@@ -386,6 +435,7 @@ export const useGenerationStore = defineStore('generation', () => {
     try {
       const response = await api.getGenerationStatus(sessionId.value)
       status.value = response.status
+      generationStage.value = response.generation_stage || null
 
       if (response.status === 'completed' && response.video_url) {
         videoUrl.value = response.video_url
@@ -438,6 +488,7 @@ export const useGenerationStore = defineStore('generation', () => {
     frames,
     errorMessage,
     isProcessing,
+    generationStage,
     // V1.5: 追问轮数状态
     questionRound,
     maxQuestionRounds,
@@ -470,6 +521,8 @@ export const useGenerationStore = defineStore('generation', () => {
     exportVideo,
     pollStatus,
     reset,
+    startPolling,
+    stopPolling,
     // V2: 答题卡方法
     selectOption,
     updateCustomInput,

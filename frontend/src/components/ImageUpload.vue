@@ -1,37 +1,62 @@
 <template>
-  <div class="image-upload">
-    <div class="upload-section">
-      <el-upload
-        class="upload-area"
-        drag
-        :auto-upload="false"
-        :show-file-list="false"
-        accept=".jpg,.jpeg,.png"
-        :disabled="disabled"
-        :on-change="handleFileChange"
-      >
-        <div v-if="!previewUrl" class="upload-placeholder">
-          <el-icon class="upload-icon"><upload-filled /></el-icon>
-          <div class="upload-text">点击或拖拽图片到此处上传</div>
-          <div class="upload-hint">支持 JPG、PNG 格式，建议图片清晰度 512x512 以上</div>
-        </div>
-        <div v-else class="image-preview">
-          <img :src="previewUrl" alt="预览图片" />
-          <div class="preview-overlay">
-            <el-icon class="preview-icon" @click.stop="handleRemove"><circle-close /></el-icon>
-          </div>
-        </div>
-      </el-upload>
+  <div class="grimoire image-upload">
+    <!-- Section Header -->
+    <div class="section-header">
+      <span class="section-icon">&#x2726;</span>
+      <span class="section-title" style="color: var(--amber);">CHARACTER</span>
     </div>
 
-    <div v-if="previewUrl && !disabled" class="image-info">
-      <div class="info-item">
-        <span class="label">文件名：</span>
-        <span class="value">{{ fileName }}</span>
+    <!-- Upload Zone (no preview) -->
+    <div
+      v-if="!previewUrl"
+      class="drop-zone"
+      :class="{ 'drop-zone--hover': isDragOver, 'drop-zone--disabled': disabled }"
+      @dragenter.prevent="onDragEnter"
+      @dragover.prevent="onDragOver"
+      @dragleave.prevent="onDragLeave"
+      @drop.prevent="onDrop"
+      @click="triggerFileInput"
+    >
+      <div class="drop-zone__circle">
+        <svg class="drop-zone__icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M24 4v28M14 22l10 10 10-10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M8 34v6a4 4 0 004 4h24a4 4 0 004-4v-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
       </div>
-      <div class="info-item">
-        <span class="label">文件大小：</span>
-        <span class="value">{{ fileSize }}</span>
+      <div class="drop-zone__text">点击或拖拽图片到此处上传</div>
+      <div class="drop-zone__hint">支持 JPG、PNG 格式，建议图片清晰度 512x512 以上</div>
+      <input
+        ref="fileInputRef"
+        type="file"
+        accept=".jpg,.jpeg,.png"
+        class="drop-zone__input"
+        :disabled="disabled"
+        @change="onFileInputChange"
+      />
+    </div>
+
+    <!-- Image Preview -->
+    <div v-else class="preview">
+      <div class="preview__canvas">
+        <img :src="previewUrl" alt="预览图片" class="preview__img" />
+        <div class="preview__overlay" @click="handleRemove">
+          <svg class="preview__remove-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2"/>
+            <path d="M11 11l10 10M21 11l-10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- File Info -->
+    <div v-if="previewUrl && !disabled" class="file-info">
+      <div class="file-info__row">
+        <span class="file-info__label">文件名：</span>
+        <span class="file-info__value">{{ fileName }}</span>
+      </div>
+      <div class="file-info__row">
+        <span class="file-info__label">文件大小：</span>
+        <span class="file-info__value">{{ fileSize }}</span>
       </div>
     </div>
   </div>
@@ -39,7 +64,6 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import { UploadFilled, CircleClose } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useGenerationStore } from '../stores/generation'
 
@@ -60,6 +84,8 @@ const store = useGenerationStore()
 const previewUrl = ref(null)
 const fileName = ref('')
 const fileSize = ref('')
+const isDragOver = ref(false)
+const fileInputRef = ref(null)
 
 // 监听外部值变化
 watch(() => props.modelValue, (newVal) => {
@@ -126,140 +152,241 @@ const formatFileSize = (bytes) => {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }
+
+/* ---- Drag-and-drop + file input helpers ---- */
+
+function processFile(file) {
+  if (!file) return
+  // Wrap in the shape handleFileChange expects
+  handleFileChange({ raw: file })
+}
+
+function triggerFileInput() {
+  if (props.disabled) return
+  fileInputRef.value?.click()
+}
+
+function onFileInputChange(e) {
+  const file = e.target.files?.[0]
+  processFile(file)
+  // Reset so the same file can be re-selected
+  e.target.value = ''
+}
+
+function onDragEnter() {
+  if (props.disabled) return
+  isDragOver.value = true
+}
+
+function onDragOver() {
+  if (props.disabled) return
+  isDragOver.value = true
+}
+
+function onDragLeave() {
+  isDragOver.value = false
+}
+
+function onDrop(e) {
+  isDragOver.value = false
+  if (props.disabled) return
+  const file = e.dataTransfer?.files?.[0]
+  processFile(file)
+}
 </script>
 
 <style scoped>
-.image-upload {
-  width: 100%;
-}
-
-.upload-section {
-  margin-bottom: 16px;
-}
-
-.upload-area {
-  width: 100%;
-}
-
-:deep(.el-upload) {
-  width: 100%;
-}
-
-:deep(.el-upload-dragger) {
-  width: 100%;
-  min-height: 280px;
-  padding: 20px;
-  border: 2px dashed var(--el-border-color);
-  border-radius: 12px;
-  background: var(--el-fill-color-light);
-  transition: all 0.3s ease;
-}
-
-:deep(.el-upload-dragger:hover) {
-  border-color: var(--el-color-primary);
-  background: var(--el-fill-color);
-}
-
-.upload-placeholder {
+/* ========================================
+   Drop Zone — magic circle style
+   ======================================== */
+.drop-zone {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 240px;
+  min-height: 260px;
+  border: 2px dashed rgba(212, 168, 83, 0.15);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.4s, border-color 0.4s;
 }
 
-.upload-icon {
-  font-size: 64px;
-  color: var(--el-color-primary);
+.drop-zone:hover,
+.drop-zone--hover {
+  border-color: var(--amber);
+  background: radial-gradient(ellipse at center, rgba(212, 168, 83, 0.06) 0%, transparent 70%);
+}
+
+.drop-zone--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.drop-zone__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  pointer-events: none; /* clicks handled by parent */
+}
+
+/* ---- Orbiting circle icon ---- */
+.drop-zone__circle {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 16px;
 }
 
-.upload-text {
-  font-size: 16px;
-  color: var(--el-text-color-primary);
-  margin-bottom: 8px;
-  font-weight: 500;
+.drop-zone__circle::before,
+.drop-zone__circle::after {
+  content: '';
+  position: absolute;
+  border: 1px solid rgba(212, 168, 83, 0.18);
+  border-radius: 50%;
 }
 
-.upload-hint {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
+.drop-zone__circle::before {
+  width: 72px;
+  height: 72px;
+  animation: orbit 8s linear infinite;
+}
+
+.drop-zone__circle::after {
+  width: 96px;
+  height: 96px;
+  animation: orbit 12s linear infinite reverse;
+}
+
+@keyframes orbit {
+  0%   { transform: rotate(0deg); border-color: rgba(212, 168, 83, 0.18); }
+  50%  { border-color: rgba(212, 168, 83, 0.35); }
+  100% { transform: rotate(360deg); border-color: rgba(212, 168, 83, 0.18); }
+}
+
+.drop-zone__icon {
+  width: 36px;
+  height: 36px;
+  color: var(--text-dim);
+  transition: color 0.3s;
+}
+
+.drop-zone:hover .drop-zone__icon,
+.drop-zone--hover .drop-zone__icon {
+  color: var(--gold);
+}
+
+.drop-zone__text {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-mid);
+  margin-bottom: 6px;
+}
+
+.drop-zone__hint {
+  font-size: 12px;
+  color: var(--text-dim);
   text-align: center;
   line-height: 1.6;
 }
 
-.image-preview {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.image-preview img {
-  max-width: 100%;
-  max-height: 280px;
-  object-fit: contain;
-  border-radius: 8px;
-}
-
-.preview-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 12px;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.image-preview:hover .preview-overlay {
-  opacity: 1;
-}
-
-.preview-icon {
-  font-size: 40px;
-  color: #fff;
-  cursor: pointer;
-}
-
-.image-info {
-  padding: 16px;
-  background: var(--el-fill-color-light);
-  border-radius: 8px;
-}
-
-.info-item {
-  display: flex;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.info-item:last-child {
+/* ========================================
+   Image Preview — checkerboard for transparency
+   ======================================== */
+.preview {
   margin-bottom: 0;
 }
 
-.info-item .label {
-  color: var(--el-text-color-secondary);
-  font-size: 14px;
-  min-width: 80px;
+.preview__canvas {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  /* dark checkerboard for transparent areas */
+  background-color: var(--abyss);
+  background-image:
+    linear-gradient(45deg, var(--obsidian) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--obsidian) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--obsidian) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--obsidian) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 
-.info-item .value {
-  color: var(--el-text-color-primary);
-  font-size: 14px;
+.preview__img {
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  display: block;
+}
+
+.preview__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 7, 13, 0.55);
+  opacity: 0;
+  transition: opacity 0.3s;
+  cursor: pointer;
+}
+
+.preview__canvas:hover .preview__overlay {
+  opacity: 1;
+}
+
+.preview__remove-icon {
+  width: 40px;
+  height: 40px;
+  color: #fff;
+  transition: color 0.2s;
+}
+
+.preview__remove-icon:hover {
+  color: var(--rose);
+}
+
+/* ========================================
+   File Info — dark background subtle
+   ======================================== */
+.file-info {
+  margin-top: 14px;
+  padding: 12px 16px;
+  background: rgba(14, 13, 23, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.file-info__row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.file-info__row:last-child {
+  margin-bottom: 0;
+}
+
+.file-info__label {
+  color: var(--text-dim);
+  font-size: 13px;
+  min-width: 76px;
+}
+
+.file-info__value {
+  color: var(--text-mid);
+  font-size: 13px;
   font-weight: 500;
-}
-
-:deep(.el-upload.is-disabled .el-upload-dragger) {
-  background: var(--el-fill-color-lighter);
-  border-color: var(--el-border-color-lighter);
-  cursor: not-allowed;
 }
 </style>

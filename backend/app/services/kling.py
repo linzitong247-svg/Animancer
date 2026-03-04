@@ -29,6 +29,10 @@ SUPPORTED_MODELS = [
     "kling-v1",        # V1 模型
     "kling-v1-5",      # V1.5 模型
     "kling-v2",        # V2 模型
+    "kling-v2-1",      # V2.1 模型
+    "kling-v2-5-turbo",# V2.5 Turbo
+    "kling-v2-6",      # V2.6 模型
+    "kling-v3",        # V3 模型
 ]
 
 # 默认模型 (使用 kling-v1-5 平衡性价比和速度)
@@ -58,6 +62,12 @@ def _get_cached_token() -> str:
 
     # 如果 Token 不存在或即将过期（提前5分钟刷新），则重新生成
     if _cached_token is None or now >= _token_expiry - 300:
+        # 调试：检查 API Key 配置
+        if not KLING_ACCESS_KEY or not KLING_SECRET_KEY:
+            logger.error("Kling API Keys not configured! Check KLING_ACCESS_KEY and KLING_SECRET_KEY")
+        else:
+            logger.debug(f"Generating token with ACCESS_KEY length: {len(KLING_ACCESS_KEY)}, SECRET_KEY length: {len(KLING_SECRET_KEY)}")
+
         _cached_token = _generate_jwt_token()
         _token_expiry = now + 3600  # 1小时有效期
         logger.debug("Generated new JWT token")
@@ -172,7 +182,14 @@ async def _make_request(
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
-        logger.error(f"Kling API request failed: {e.response.status_code} - {e.response.text}")
+        # 详细打印错误响应以便调试
+        logger.error(f"Kling API request failed: {e.response.status_code}")
+        logger.error(f"Response body: {e.response.text}")
+        try:
+            error_json = e.response.json()
+            logger.error(f"Error details: {error_json}")
+        except Exception:
+            pass
         raise
 
     logger.info(f"[Kling] 响应状态: {response.status_code}")

@@ -6,13 +6,14 @@ Sub-Agent G (SA_G) - Animation Generation Agent
 
 import logging
 from pathlib import Path
+from typing import Optional
 from ..services import kling
 from ..config import VIDEOS_DIR
 
 logger = logging.getLogger(__name__)
 
 
-async def generate_animation(image_path: str, prompt: str) -> str:
+async def generate_animation(image_path: str, prompt: str, tail_image_path: Optional[str] = None) -> str:
     """
     Generate an animation video from a static image using Kling AI.
 
@@ -60,10 +61,17 @@ async def generate_animation(image_path: str, prompt: str) -> str:
     VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
+        # 当传入尾帧时自动切换到 pro 模式（Kling API 要求）
+        mode = "pro" if tail_image_path else "std"
+        if tail_image_path:
+            logger.info(f"    尾帧: {Path(tail_image_path).name} (自动切换到 pro 模式)")
+
         # Call Kling AI service (full pipeline: submit -> poll -> download)
         video_path = await kling.generate_video_from_image(
             image_path=image_path,
-            prompt=prompt
+            prompt=prompt,
+            mode=mode,
+            tail_image_path=tail_image_path
         )
 
         # Validate the returned video path

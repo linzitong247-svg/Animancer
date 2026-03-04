@@ -6,7 +6,7 @@ LLM Service - 智谱 AI API 封装
 """
 
 from openai import AsyncOpenAI
-from typing import Optional
+from typing import Optional, List
 import logging
 
 from ..config import ZHIPU_API_KEY
@@ -23,7 +23,8 @@ client = AsyncOpenAI(
 async def chat(
     system_prompt: str,
     user_message: str,
-    image_url: Optional[str] = None
+    image_url: Optional[str] = None,
+    image_urls: Optional[List[str]] = None
 ) -> str:
     """
     调用智谱 AI 进行对话
@@ -31,7 +32,8 @@ async def chat(
     Args:
         system_prompt: 系统提示词，设定 AI 行为和角色
         user_message: 用户消息内容
-        image_url: 可选的图片 URL，传入时使用多模态模型
+        image_url: 可选的单张图片 URL，传入时使用多模态模型
+        image_urls: 可选的多张图片 URL 列表，传入时使用多模态模型
 
     Returns:
         str: AI 返回的回复内容
@@ -47,26 +49,30 @@ async def chat(
     if not user_message:
         raise ValueError("user_message 不能为空")
 
+    # 合并 image_url 和 image_urls
+    all_images = list(image_urls or [])
+    if image_url and image_url not in all_images:
+        all_images.insert(0, image_url)
+
+    has_images = len(all_images) > 0
+
     # 根据是否包含图片选择模型
-    model = "glm-4v-flash" if image_url else "glm-4-flash"
+    model = "glm-4v-flash" if has_images else "glm-4-flash"
 
     # 构建消息列表
     messages = [
         {"role": "system", "content": system_prompt},
     ]
 
-    if image_url:
-        # 多模态消息：文本 + 图片
-        messages.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": user_message},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": image_url}
-                },
-            ],
-        })
+    if has_images:
+        # 多模态消息：文本 + 多张图片
+        content = [{"type": "text", "text": user_message}]
+        for img_url in all_images:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": img_url}
+            })
+        messages.append({"role": "user", "content": content})
     else:
         # 纯文本消息
         messages.append({
@@ -75,7 +81,7 @@ async def chat(
         })
 
     try:
-        logger.info(f"调用 LLM: model={model}, has_image={image_url is not None}")
+        logger.info(f"调用 LLM: model={model}, images={len(all_images)}")
 
         response = await client.chat.completions.create(
             model=model,

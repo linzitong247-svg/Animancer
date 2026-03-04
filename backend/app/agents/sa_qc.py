@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 # Thread pool for subprocess calls
 _thread_pool = ThreadPoolExecutor(max_workers=4)
 
+# 质检通过阈值 (测试时可调低)
+QC_PASS_THRESHOLD = 20
+
 
 async def _run_ffmpeg_async(cmd: List[str], timeout: int = 60) -> tuple[int, bytes, bytes]:
     """
@@ -44,57 +47,61 @@ async def _run_ffmpeg_async(cmd: List[str], timeout: int = 60) -> tuple[int, byt
 
 
 # System prompt for quality control
-SA_QC_SYSTEM_PROMPT = """You are a quality control specialist for AI-generated animation videos.
+SA_QC_SYSTEM_PROMPT = """You are a quality control specialist for AI-generated 2D game character animations.
 
-Your task is to evaluate a generated animation against the original user request and provide a detailed quality assessment.
+You will receive several KEY FRAMES extracted from a generated animation video. You CANNOT see the video itself — you can only evaluate based on these individual static frames.
+
+Your task is to evaluate the frames and provide a quality assessment.
 
 ## Evaluation Criteria
 
-1. **Action Matching** (40% weight):
-   - Does the generated animation match the requested action?
-   - Is the motion direction and type correct?
-   - Does the timing feel appropriate for the described action?
+1. **Pose Plausibility** (40% weight):
+   - Does each frame show a natural, physically plausible character pose?
+   - Are limbs correctly proportioned and positioned (no extra limbs, no missing body parts)?
+   - Is the character's body structure anatomically reasonable for a 2D game sprite?
+   - Are there any broken or twisted limbs?
 
 2. **Visual Consistency** (30% weight):
-   - Does the character/subject maintain consistent appearance throughout?
-   - Are there sudden changes in clothing, hair, or features?
-   - Is the art style preserved from frame to frame?
+   - Does the character maintain consistent appearance ACROSS all frames?
+   - Are clothing, hair style, colors, and proportions the same in each frame?
+   - Does the character remain at a consistent scale (not growing or shrinking)?
+   - Is the 2D art style preserved across all frames?
 
-3. **Motion Quality** (30% weight):
-   - Is the animation smooth or jerky?
-   - Are there visible artifacts or glitches?
-   - Does the motion feel natural and physically plausible?
+3. **Frame Quality** (30% weight):
+   - Is each frame clear and sharp (no excessive blur)?
+   - Are there visible artifacts, distortions, or rendering glitches?
+   - Is the character's silhouette clean and readable?
+   - Are there any obvious deformations in the character's face or body?
 
 ## Quality Standards
 
-- **PASS**: The animation fulfills the user's request with acceptable quality.
-  Minor imperfections are acceptable if the main action is clearly recognizable.
+- **PASS**: The frames show acceptable quality for a 2D game sprite animation.
+  Minor imperfections are acceptable if the character is recognizable and poses are reasonable.
 
-- **FAIL**: The animation has significant issues that prevent it from fulfilling the request.
-  This includes wrong action, severe inconsistency, or major technical defects.
+- **FAIL**: The frames have significant issues — severe deformation, broken anatomy, major inconsistency between frames, or heavy artifacts.
 
 ## Output Format
 
-Respond ONLY with a valid JSON object in the following format:
+Respond ONLY with a valid JSON object:
 
 ```json
 {
   "passed": true/false,
-  "action_score": <0-100>,
+  "pose_score": <0-100>,
   "consistency_score": <0-100>,
-  "motion_score": <0-100>,
+  "quality_score": <0-100>,
   "overall_score": <0-100>,
-  "report": "<Detailed explanation of the evaluation>"
+  "report": "<Detailed explanation based on what you observe in the frames>"
 }
 ```
 
 Where:
-- `passed`: Boolean indicating if the animation passes quality threshold (overall_score >= 20, relaxed for testing)
-- `action_score`: Score for action matching (0-100)
-- `consistency_score`: Score for visual consistency (0-100)
-- `motion_score`: Score for motion quality (0-100)
-- `overall_score`: Weighted average of the three scores
-- `report`: Clear, detailed explanation of the evaluation and any issues found
+- `passed`: Boolean (true if overall_score >= threshold)
+- `pose_score`: Score for pose plausibility (0-100)
+- `consistency_score`: Score for visual consistency across frames (0-100)
+- `quality_score`: Score for individual frame quality (0-100)
+- `overall_score`: Weighted average: pose*0.4 + consistency*0.3 + quality*0.3
+- `report`: Describe what you see in each frame, note any issues
 
 Do not include any text outside the JSON object."""
 
@@ -232,30 +239,29 @@ Frame 5 (End):
 
 Please evaluate the animation quality based on these key frames and the original request."""
 
-        # For multimodal evaluation, we need to construct a message with multiple images
-        # Since our LLM service supports a single image_url, we'll use the first frame
-        # as a primary reference and include context about others
-        primary_frame_url = frame_data_urls[0] if frame_data_urls else None
+        # 构建评估消息，所有关键帧都传给 LLM
+        frame_labels = ["Start (0%)", "25%", "50%", "75%", "End (95%)"]
+        frame_list_text = "\n".join(
+            f"- Frame {i+1} ({frame_labels[i] if i < len(frame_labels) else f'{i+1}'})"
+            for i in range(len(frame_data_urls))
+        )
 
         enhanced_message = f"""Original Animation Request:
 {original_prompt}
 
-I am showing you key frames extracted from the generated animation video.
+I am showing you {len(frame_data_urls)} key frames extracted from the generated animation video at different timestamps:
+{frame_list_text}
 
-{len(frame_data_urls)} key frames were extracted at different timestamps (start, 25%, 50%, 75%, end).
+Please evaluate each frame individually and compare them against each other:
+1. Is each frame's character pose plausible and anatomically correct?
+2. Is the character visually consistent across all frames (same appearance, scale, proportions)?
+3. Is each frame's image quality acceptable (no artifacts, blur, or deformations)?"""
 
-Please evaluate:
-1. Does the animation show the requested action?
-2. Is the character/subject visually consistent across frames?
-3. Is the motion quality acceptable?
-
-Frame 1 (Start) is attached for visual reference."""
-
-        # Call LLM with vision
+        # Call LLM with all key frames
         response = await llm.chat(
             system_prompt=SA_QC_SYSTEM_PROMPT,
             user_message=enhanced_message,
-            image_url=primary_frame_url
+            image_urls=frame_data_urls
         )
 
         # Parse JSON response
@@ -286,9 +292,9 @@ Frame 1 (Start) is attached for visual reference."""
             result = json.loads(json_str)
 
             # Ensure required fields exist
-            # 测试阶段降低阈值到 20，确保全链路打通
-            if "passed" not in result:
-                result["passed"] = result.get("overall_score", 0) >= 20
+            # 使用本地阈值覆盖 LLM 返回的 passed 值
+            overall = result.get("overall_score", 0)
+            result["passed"] = overall >= QC_PASS_THRESHOLD
             if "report" not in result:
                 result["report"] = "Quality evaluation completed."
 
@@ -296,9 +302,9 @@ Frame 1 (Start) is attached for visual reference."""
             logger.info(f"  [SA_QC] 📋 质检报告:")
             logger.info(f"    - passed: {result.get('passed')}")
             logger.info(f"    - overall_score: {result.get('overall_score', 'N/A')}")
-            logger.info(f"    - action_score: {result.get('action_score', 'N/A')}")
+            logger.info(f"    - pose_score: {result.get('pose_score', 'N/A')}")
             logger.info(f"    - consistency_score: {result.get('consistency_score', 'N/A')}")
-            logger.info(f"    - motion_score: {result.get('motion_score', 'N/A')}")
+            logger.info(f"    - quality_score: {result.get('quality_score', 'N/A')}")
             logger.info(f"    - report: {result.get('report', 'N/A')[:300]}...")
             return result
 
@@ -359,36 +365,8 @@ async def quality_check(video_path: str, original_prompt: str) -> dict:
         "The animation shows smooth hand waving motion with good visual consistency..."
     """
     logger.info("  " + "=" * 46)
-    logger.info("  🔍 SA_QC: 质量检查 (测试模式 - 跳过)")
+    logger.info("  🔍 SA_QC: 质量检查")
     logger.info("  " + "=" * 46)
-
-    # Validate video exists
-    video_file = Path(video_path)
-    if not video_file.exists():
-        logger.error(f"  [SA_QC] ❌ 视频文件不存在: {video_path}")
-        raise FileNotFoundError(f"Video file not found: {video_path}")
-
-    logger.info(f"  [SA_QC] 输入: video={video_file.name} ({video_file.stat().st_size} bytes)")
-    logger.info(f"  [SA_QC] 原始提示词: {original_prompt[:80]}...")
-
-    # 测试模式：直接返回通过，跳过实际 QC
-    # TODO: 后续接入支持视频的多模态模型 (Gemini 2.0 Flash / 通义千问 VL)
-    result = {
-        "passed": True,
-        "action_score": 80,
-        "consistency_score": 85,
-        "motion_score": 75,
-        "overall_score": 80,
-        "report": "Quality check skipped in test mode. Video generated successfully."
-    }
-
-    logger.info(f"  [SA_QC] 📋 质检报告 (测试模式):")
-    logger.info(f"    - passed: {result['passed']}")
-    logger.info(f"    - overall_score: {result['overall_score']}")
-    logger.info(f"    - report: {result['report']}")
-    logger.info("  " + "=" * 46)
-
-    return result
 
     # Validate video exists
     video_file = Path(video_path)

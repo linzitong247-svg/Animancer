@@ -4,16 +4,48 @@
 
 上传静态 2D 角色图片，输入动作描述，自动生成动画视频并移除背景。
 
+![准备阶段](docs/images/准备阶段.gif)
+
+![生成动画](docs/images/生成动画.gif)
+
+![一键导出](docs/images/一键导出.gif)
+
 ## 🎯 功能特性
 
 - **AI 动画生成**：上传图片 + 动作描述 → 自动生成动画视频
 - **答题卡式追问**：3 个固定问题（角色性格、动作类型、镜头角度），点击选择即可
-- **质量检查**：AI 自动评估生成结果（测试阶段已跳过）
+- **质量检查**：AI 自动评估生成结果
 - **背景移除**：一键移除视频背景，生成透明 PNG 序列帧
 - **WebM 预览**：透明背景视频可直接在浏览器预览（棋盘格背景）
 - **ZIP 下载**：PNG 序列帧打包下载，方便导入其他工具
 
-## 🆕 V1.5 更新
+## 🆕 V2.0 更新 - 魔法工坊主题
+
+### 全新视觉设计
+
+采用暗金魔法主题（Arcane Workshop），沉浸式创作工具体验：
+
+![预览图](docs/images/preview.png)
+
+### 前端视觉重构
+
+- **暗金主题**：深色底 + 琥珀金主色 + 薰衣草紫辅色
+- **三栏布局**：进度侧栏 + 输入面板 + 预览面板
+- **5 步进度指示**：上传 → 描述 → 细化 → 生成 → 导出
+- **粒子背景**：金色/紫色粒子上浮效果
+- **入场动画**：staggered reveal 渐入效果
+- **自定义组件**：魔法阵上传区、咒语输入框、答题卡、播放器
+
+### 后端优化
+
+- **2D 横版游戏约束**：SAA System Prompt 新增侧视角、固定镜头、循环动作等约束
+- **循环播放支持**：传尾帧到 Kling API（首帧=尾帧），动画可无缝循环
+- **真实质检启用**：5 帧关键帧 LLM 评估（姿态/一致性/画质）
+- **Kling v2 模型**：默认模型升级，支持 v2.1 / v2.5-turbo / v2.6 / v3
+
+---
+
+## V1.5 更新
 
 ### 答题卡模式
 
@@ -42,10 +74,12 @@
 - JSON 解析容错（支持单引号字符串）
 - 前端状态同步优化
 
+---
+
 ## 🛠️ 技术栈
 
 ```
-前端: Vue 3 + Vite + Element Plus + Pinia
+前端: Vue 3 + Vite + Pinia
 后端: FastAPI (Python)
      ├── MA (主 Agent: 流程编排)
      ├── SA_A (Prompt 生成)
@@ -203,7 +237,10 @@ Animancer/
 │   ├── src/
 │   │   ├── views/          # 页面
 │   │   ├── components/     # UI 组件
-│   │   │   └── QuestionCard.vue  # V1.5 答题卡组件
+│   │   │   ├── QuestionCard.vue      # 答题卡组件
+│   │   │   ├── StepSidebar.vue       # V2 进度侧栏
+│   │   │   ├── ParticleCanvas.vue    # V2 粒子背景
+│   │   │   └── GenerationProgress.vue # V2 生成进度
 │   │   ├── stores/         # Pinia 状态管理
 │   │   └── api/            # API 封装
 │   └── package.json
@@ -219,6 +256,7 @@ Animancer/
 │   │   └── main.py         # FastAPI 入口
 │   ├── data/               # 运行时数据 (gitignore)
 │   └── requirements.txt
+├── docs/images/            # 文档图片
 └── README.md
 ```
 

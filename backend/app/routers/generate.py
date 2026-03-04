@@ -200,11 +200,13 @@ async def get_session_status(session_id: str) -> Dict[str, Any]:
     """
     Get the current status of a generation session.
 
+    Returns a subset of session state suitable for frontend polling.
+
     Args:
         session_id: Session ID to query
 
     Returns:
-        Session state dictionary
+        Dict with status, generation_stage, video_url, error, retry_count
 
     Raises:
         HTTPException: 404 if session not found
@@ -215,4 +217,10 @@ async def get_session_status(session_id: str) -> Dict[str, Any]:
             status_code=404,
             detail=f"Session not found: {session_id}"
         )
-    return session
+    return {
+        "status": session.get("status", session.get("state", "generating")),
+        "generation_stage": session.get("generation_stage"),
+        "video_url": session.get("video_url"),
+        "error": session.get("error"),
+        "retry_count": session.get("retry_count", 0),
+    }

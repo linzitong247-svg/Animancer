@@ -119,12 +119,16 @@ async def start_generation(
         "user_prompt": prompt,
         "history": [],
         "state": "started",
+        "status": "generating",
+        "generation_stage": None,       # sa_a, sa_g, sa_qc
         "retry_count": 0,
         "generated_prompts": [],
         "qc_reports": [],
         "start_time": time.time(),
         "question_round": 0,           # 当前追问轮数
         "max_question_rounds": 2,      # 最大追问轮数
+        "video_url": None,
+        "error": None,
     }
     _log_pipeline_step("SESSION", "INFO", f"会话已初始化")
 
@@ -156,8 +160,14 @@ async def start_generation(
             f"异常: {type(e).__name__}: {e}，继续流程")
         logger.warning("[MA] 继续流程（跳过充足性检查）")
 
-    # 信息充足，开始生成流程
-    return await _execute_generation_pipeline(session_id)
+    # 信息充足，后台启动生成流程
+    asyncio.create_task(_execute_generation_pipeline(session_id))
+    return {
+        "status": "generating",
+        "session_id": session_id,
+        "generation_stage": "sa_a",
+        "message": "生成流程已启动"
+    }
 
 
 async def continue_generation(
@@ -247,7 +257,15 @@ async def continue_generation(
 
     # 直接进入生成流程（不再需要再次检查充足性，因为固定3个问题已收集足够信息）
     session["state"] = "generating"
-    return await _execute_generation_pipeline(session_id)
+    session["status"] = "generating"
+    session["generation_stage"] = "sa_a"
+    asyncio.create_task(_execute_generation_pipeline(session_id))
+    return {
+        "status": "generating",
+        "session_id": session_id,
+        "generation_stage": "sa_a",
+        "message": "生成流程已启动"
+    }
 
 
 async def _execute_generation_pipeline(
@@ -270,6 +288,8 @@ async def _execute_generation_pipeline(
         logger.info(f"\n{'🔄' * 20}\n  重试 #{retry_count}/{MAX_RETRY_COUNT}\n{'🔄' * 20}")
 
     # ========== STEP 2: SA_A - Prompt Generation ==========
+    session["generation_stage"] = "sa_a"
+    session["status"] = "generating"
     _log_pipeline_step("STEP 2: SA_A (Prompt Generation)", "START")
 
     # 获取上一次的质检报告（如果有）
@@ -279,10 +299,10 @@ async def _execute_generation_pipeline(
         qc_feedback = latest_qc.get("report", "")
         if "overall_score" in latest_qc:
             qc_feedback += f" (评分: {latest_qc['overall_score']}/100)"
-        action_score = latest_qc.get("action_score", "N/A")
+        pose_score = latest_qc.get("pose_score", "N/A")
         consistency_score = latest_qc.get("consistency_score", "N/A")
-        motion_score = latest_qc.get("motion_score", "N/A")
-        qc_feedback += f" [动作: {action_score}, 一致性: {consistency_score}, 质量: {motion_score}]"
+        quality_score = latest_qc.get("quality_score", "N/A")
+        qc_feedback += f" [姿态: {pose_score}, 一致性: {consistency_score}, 画质: {quality_score}]"
         _log_pipeline_step("SA_A", "INFO", f"使用 QC 反馈优化: {qc_feedback[:80]}...")
 
     try:
@@ -302,16 +322,21 @@ async def _execute_generation_pipeline(
     except Exception as e:
         _log_pipeline_step("STEP 2: SA_A (Prompt Generation)", "ERROR", str(e))
         session["state"] = "error"
+        session["status"] = "error"
+        session["generation_stage"] = None
+        session["error"] = str(e)
         return {"status": "error", "session_id": session_id, "error": str(e)}
 
     # ========== STEP 3: SA_G - Animation Generation ==========
+    session["generation_stage"] = "sa_g"
     _log_pipeline_step("STEP 3: SA_G (Animation Generation)", "START")
     step_start = time.time()
 
     try:
         video_path = await generate_animation(
             image_path=session["image_path"],
-            prompt=generated_prompt
+            prompt=generated_prompt,
+            tail_image_path=None  # v1.5 标准模式，不使用首尾帧控制
         )
 
         video_file = Path(video_path)
@@ -327,9 +352,13 @@ async def _execute_generation_pipeline(
     except Exception as e:
         _log_pipeline_step("STEP 3: SA_G (Animation Generation)", "ERROR", str(e))
         session["state"] = "error"
+        session["status"] = "error"
+        session["generation_stage"] = None
+        session["error"] = str(e)
         return {"status": "error", "session_id": session_id, "error": str(e)}
 
     # ========== STEP 4: SA_QC - Quality Control ==========
+    session["generation_stage"] = "sa_qc"
     _log_pipeline_step("STEP 4: SA_QC (Quality Control)", "START")
     step_start = time.time()
 
@@ -344,31 +373,39 @@ async def _execute_generation_pipeline(
 
         passed = qc_result.get("passed", False)
         overall_score = qc_result.get("overall_score", "N/A")
-        action_score = qc_result.get("action_score", "N/A")
+        pose_score = qc_result.get("pose_score", "N/A")
         consistency_score = qc_result.get("consistency_score", "N/A")
-        motion_score = qc_result.get("motion_score", "N/A")
+        quality_score = qc_result.get("quality_score", "N/A")
 
         status_icon = "✅" if passed else "❌"
         _log_pipeline_step("STEP 4: SA_QC (Quality Control)", "END" if passed else "INFO",
             f"{status_icon} passed={passed}, overall={overall_score}, "
-            f"action={action_score}, consistency={consistency_score}, motion={motion_score}, "
+            f"pose={pose_score}, consistency={consistency_score}, quality={quality_score}, "
             f"耗时={step_duration:.1f}s")
 
     except Exception as e:
         _log_pipeline_step("STEP 4: SA_QC (Quality Control)", "ERROR", str(e))
         session["state"] = "error"
+        session["status"] = "error"
+        session["generation_stage"] = None
+        session["error"] = str(e)
         return {"status": "error", "session_id": session_id, "error": str(e)}
 
     # ========== 检查结果 ==========
     if qc_result["passed"]:
-        # 质检通过，返回结果
+        # 质检通过，更新会话状态
         session["state"] = "completed"
+        session["status"] = "completed"
+        session["generation_stage"] = None
         session["video_path"] = video_path
         total_duration = time.time() - start_time
 
         # 生成可访问的视频 URL
         video_filename = Path(video_path).name
         video_url = f"/videos/{video_filename}"
+        session["video_url"] = video_url
+        session["qc_result"] = qc_result
+        session["generated_prompt"] = generated_prompt
 
         logger.info(f"\n{'🎉' * 20}")
         logger.info(f"  动画生成成功!")
@@ -397,9 +434,15 @@ async def _execute_generation_pipeline(
             await asyncio.sleep(0.5)
             return await _execute_generation_pipeline(session_id)
         else:
-            # 达到最大重试次数，返回失败结果
+            # 达到最大重试次数，更新会话状态
             logger.warning(f"\n{'❌' * 20}\n  达到最大重试次数\n{'❌' * 20}\n")
             session["state"] = "failed"
+            session["status"] = "failed"
+            session["generation_stage"] = None
+            session["error"] = "达到最大重试次数，质检仍未通过"
+            # 即使失败也保存视频URL，让用户可以查看
+            video_filename = Path(video_path).name
+            session["video_url"] = f"/videos/{video_filename}"
             return {
                 "status": "failed",
                 "session_id": session_id,

@@ -1,11 +1,29 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+/* ========================================
+   Animancer V2 — Global Theme & Variables
+   ======================================== */
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Cinzel:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+:root {
+  /* Core palette — gold dominant + purple/green accents */
+  --void: #0c0b14;
+  --abyss: #131220;
+  --obsidian: #1c1935;
+  --slate: #262245;
+  --amber: #dbb460;
+  --gold: #f5d36a;
+  --gold-dim: rgba(219, 180, 96, 0.12);
+  --gold-glow: rgba(245, 211, 106, 0.4);
+  --lavender: #b0a3d4;
+  --amethyst: #7e6ea8;
+  --emerald: #6ec89a;
+  --rose: #d47079;
+  --text-bright: #f5f2e8;
+  --text-mid: #b5b0a3;
+  --text-dim: #78736a;
+  --border-subtle: rgba(219, 180, 96, 0.12);
+  --border-glow: rgba(219, 180, 96, 0.28);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -13,67 +31,251 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
+/* ========================================
+   Global Reset
+   ======================================== */
+* {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-.card {
-  padding: 2em;
+html, body {
+  height: 100%;
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--void);
+  color: var(--text-bright);
+  line-height: 1.5;
+  overflow: hidden;
 }
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  height: 100%;
+  min-height: 100vh;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+/* ========================================
+   Custom Scrollbar — gold translucent
+   ======================================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(212, 168, 83, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 168, 83, 0.35);
+}
+
+/* ========================================
+   Grimoire Card — shared magic-book card
+   ======================================== */
+.grimoire {
+  background: linear-gradient(160deg, rgba(38, 34, 69, 0.7), rgba(19, 18, 32, 0.85));
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 22px;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+  transition: border-color 0.4s, box-shadow 0.4s;
+}
+
+.grimoire::before {
+  content: '\27E1';
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  font-size: 9px;
+  color: var(--amber);
+  opacity: 0.12;
+  transition: opacity 0.4s;
+}
+
+.grimoire::after {
+  content: '\27E1';
+  position: absolute;
+  bottom: 10px;
+  right: 14px;
+  font-size: 9px;
+  color: var(--amber);
+  opacity: 0.12;
+  transition: opacity 0.4s;
+}
+
+.grimoire:hover {
+  border-color: var(--border-glow);
+  box-shadow: 0 0 40px rgba(212, 168, 83, 0.04);
+}
+
+.grimoire:hover::before,
+.grimoire:hover::after {
+  opacity: 0.35;
+}
+
+/* ========================================
+   Buttons — Gold primary + Ghost secondary
+   ======================================== */
+.btn-gold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--amber), #b8862d);
+  color: var(--void);
+  box-shadow: 0 2px 12px rgba(212, 168, 83, 0.25);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.btn-gold::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, transparent 40%, rgba(255, 255, 255, 0.15) 50%, transparent 60%);
+  transform: translateX(-100%);
+  transition: transform 0.6s;
+}
+
+.btn-gold:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(212, 168, 83, 0.35);
+}
+
+.btn-gold:hover::before {
+  transform: translateX(100%);
+}
+
+.btn-gold:active {
+  transform: translateY(0);
+}
+
+.btn-gold:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-gold:disabled:hover::before {
+  transform: translateX(-100%);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(30, 27, 58, 0.4);
+  color: var(--text-mid);
+  transition: border-color 0.3s, color 0.3s, box-shadow 0.3s;
+}
+
+.btn-ghost:hover {
+  border-color: var(--lavender);
+  color: var(--lavender);
+  box-shadow: 0 0 20px rgba(157, 142, 199, 0.08);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ========================================
+   Section Header — reusable title style
+   ======================================== */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.section-icon {
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+.section-title {
+  font-family: 'Cinzel', serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+/* ========================================
+   Page Entrance Animations (staggered reveal)
+   ======================================== */
+.anim-fade-down {
+  animation: fadeDown 0.5s ease both;
+}
+
+.anim-slide-right {
+  animation: slideRight 0.5s ease both;
+  animation-delay: 0.05s;
+}
+
+.anim-rise {
+  animation: rise 0.5s ease both;
+}
+
+@keyframes fadeDown {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
   }
-  a:hover {
-    color: #747bff;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
-  button {
-    background-color: #f9f9f9;
+}
+
+@keyframes slideRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

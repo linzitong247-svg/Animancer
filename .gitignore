@@ -54,6 +54,12 @@ mermaid.md
 mermaid.pdf
 prd.md
 technical-plan.md
+v1.5technical-plan.md
+v1.5开发记录.md
+v2plan.md
+v2technical-plan.md
+v2开发记录.md
+preview-*.html
 
 # Test files
 test_*.py
